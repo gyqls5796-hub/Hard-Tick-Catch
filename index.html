@@ -3,83 +3,216 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>숨은 해충 찾기 AR</title>
-  <!-- A-Frame 라이브러리 로드 -->
-  <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+  <title>숨은 참진드기 찾기 AR</title>
   
   <style>
-    body { margin: 0; overflow: hidden; font-family: sans-serif; }
-    #ui-container {
-      position: absolute;
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: 'Pretendard', sans-serif;
+      background-color: #000;
+    }
+
+    /* 실제 스마트폰 카메라 배경 비디오 */
+    #camera-feed {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      object-fit: cover;
+      z-index: 1;
+    }
+
+    /* 상단 상태바 */
+    #ui-bar {
+      position: fixed;
       top: 20px;
       left: 50%;
       transform: translateX(-50%);
-      z-index: 1000;
-      background: rgba(0, 0, 0, 0.7);
+      z-index: 100;
+      background: rgba(0, 0, 0, 0.75);
       color: #fff;
-      padding: 10px 20px;
-      border-radius: 20px;
+      padding: 12px 24px;
+      border-radius: 30px;
+      font-size: 16px;
       font-weight: bold;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
       text-align: center;
+      white-space: nowrap;
+    }
+
+    /* 게임 캔버스 (캐릭터들이 떠다니는 레이어) */
+    #game-canvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 10;
+    }
+
+    /* 해충 캐릭터 아이콘 */
+    .bug-target {
+      position: absolute;
+      width: 80px;
+      height: 80px;
+      cursor: pointer;
+      transform: translate(-50%, -50%);
+      animation: floatBug 2s ease-in-out infinite alternate;
+      z-index: 20;
+    }
+
+    @keyframes floatBug {
+      0% { transform: translate(-50%, -50%) translateY(-10px) scale(1); }
+      100% { transform: translate(-50%, -50%) translateY(10px) scale(1.1); }
+    }
+
+    /* 홍보/성공 모달 팝업 */
+    #success-modal {
+      display: none;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 200;
+      background: #ffffff;
+      padding: 24px;
+      border-radius: 20px;
+      width: 85%;
+      max-width: 320px;
+      text-align: center;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+    }
+
+    #success-modal h2 {
+      margin: 0 0 10px;
+      color: #e53935;
+      font-size: 20px;
+    }
+
+    #success-modal p {
+      color: #333;
+      font-size: 14px;
+      line-height: 1.6;
+      margin-bottom: 20px;
+    }
+
+    #success-modal button {
+      background: #2e7d32;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 10px;
+      font-weight: bold;
+      font-size: 15px;
+      cursor: pointer;
+      width: 100%;
     }
   </style>
 </head>
 <body>
+
+  <!-- 카메라 스트림 영상 -->
+  <video id="camera-feed" autoplay playsinline muted></video>
+
   <!-- 상단 점수 UI -->
-  <div id="ui-container">
-    잡은 해충: <span id="score">0</span> / 3
+  <div id="ui-bar">
+    🔍 주변의 참진드기를 터치해 잡으세요! (<span id="score-text">0</span>/3)
   </div>
 
-  <a-scene embedded vr-mode-ui="enabled: false" raycaster="objects: .clickable" cursor="rayOrigin: mouse">
-    <!-- 카메라 및 센서 시점 -->
-    <a-camera position="0 1.6 0" look-controls="enabled: true"></a-camera>
+  <!-- 해충들이 생성될 영역 -->
+  <div id="game-canvas"></div>
 
-    <!-- 배경 조명 -->
-    <a-light type="ambient" intensity="1"></a-light>
-    <a-light type="directional" position="0 10 0" intensity="0.5"></a-light>
-
-    <!-- 1번 해충 (전방) -->
-    <!-- 3D 모델 교체 시: <a-entity gltf-model="url(mosquito.glb)" ...></a-entity> -->
-    <a-sphere class="clickable" position="0 1.5 -3" radius="0.4" color="#FF5722"
-              animation="property: position; to: 0 1.8 -3; dir: alternate; loop: true; dur: 1000">
-      <a-text value="진드기" align="center" position="0 0.6 0" scale="1.5 1.5 1.5" color="#FFF"></a-text>
-    </a-sphere>
-
-    <!-- 2번 해충 (우측) -->
-    <a-sphere class="clickable" position="3 1.2 -1" radius="0.35" color="#4CAF50"
-              animation="property: position; to: 3 1.5 -1; dir: alternate; loop: true; dur: 800">
-      <a-text value="모기" align="center" position="0 0.6 0" scale="1.5 1.5 1.5" color="#FFF"></a-text>
-    </a-sphere>
-
-    <!-- 3번 해충 (좌측) -->
-    <a-sphere class="clickable" position="-2.5 1.8 -2" radius="0.4" color="#E91E63"
-              animation="property: position; to: -2.5 1.4 -2; dir: alternate; loop: true; dur: 1200">
-      <a-text value="진드기" align="center" position="0 0.6 0" scale="1.5 1.5 1.5" color="#FFF"></a-text>
-    </a-sphere>
-  </a-scene>
+  <!-- 홍보 안내 팝업 -->
+  <div id="success-modal">
+    <h2>🎉 해충 박멸 완료!</h2>
+    <p>
+      야외 활동 시 <strong>긴 소매 착용</strong> 및 <strong>기피제 뿌리기</strong>를 잊지 마세요!<br><br>
+      귀가 후에는 즉시 샤워하고 옷을 털어 세탁해야 진드기 매개 감염병을 예방할 수 있습니다.
+    </p>
+    <button onclick="location.reload()">다시 하기</button>
+  </div>
 
   <script>
-    let score = 0;
-    const scoreElement = document.getElementById('score');
-    const bugs = document.querySelectorAll('.clickable');
+    const scoreText = document.getElementById('score-text');
+    const gameCanvas = document.getElementById('game-canvas');
+    const modal = document.getElementById('success-modal');
+    const video = document.getElementById('camera-feed');
 
-    // 캐릭터 클릭(터치) 이벤트
-    bugs.forEach(bug => {
-      bug.addEventListener('click', function () {
-        // 잡았을 때 사라지는 애니메이션 효과
-        this.setAttribute('visible', 'false');
-        // 클릭 중복 방지
-        this.classList.remove('clickable');
-        
-        score++;
-        scoreElement.textContent = score;
+    let currentScore = 0;
+    const totalBugs = 3;
 
-        if (score === bugs.length) {
+    // 1. 카메라 시작
+    async function startCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" } },
+          audio: false
+        });
+        video.srcObject = stream;
+      } catch (err) {
+        console.warn("카메라 권한 오류 또는 데스크톱 환경:", err);
+      }
+    }
+
+    // 2. 진드기 SVG 그래픽 생성 함수
+    function createTickSVG() {
+      return `
+        <svg viewBox="0 0 100 100" width="100%" height="100%" filter="drop-shadow(0px 5px 5px rgba(0,0,0,0.5))">
+          <ellipse cx="50" cy="55" rx="25" ry="30" fill="#4E342E"/>
+          <ellipse cx="50" cy="55" rx="20" ry="25" fill="#6D4C41"/>
+          <ellipse cx="50" cy="28" rx="14" ry="12" fill="#2E1C14"/>
+          <!-- 다리 -->
+          <path d="M25 45 Q 10 30 5 45" stroke="#2E1C14" stroke-width="4" fill="none"/>
+          <path d="M25 55 Q 10 55 5 65" stroke="#2E1C14" stroke-width="4" fill="none"/>
+          <path d="M25 65 Q 10 80 8 90" stroke="#2E1C14" stroke-width="4" fill="none"/>
+          <path d="M75 45 Q 90 30 95 45" stroke="#2E1C14" stroke-width="4" fill="none"/>
+          <path d="M75 55 Q 90 55 95 65" stroke="#2E1C14" stroke-width="4" fill="none"/>
+          <path d="M75 65 Q 90 80 92 90" stroke="#2E1C14" stroke-width="4" fill="none"/>
+        </svg>
+      `;
+    }
+
+    // 3. 해충 배치
+    function spawnBugs() {
+      const positions = [
+        { x: 25, y: 35 },
+        { x: 75, y: 55 },
+        { x: 45, y: 75 }
+      ];
+
+      positions.forEach((pos, idx) => {
+        const bug = document.createElement('div');
+        bug.className = 'bug-target';
+        bug.style.left = `${pos.x}%`;
+        bug.style.top = `${pos.y}%`;
+        bug.innerHTML = createTickSVG();
+
+        bug.addEventListener('click', (e) => {
+          e.stopPropagation();
+          bug.style.transform = 'translate(-50%, -50%) scale(0)';
+          bug.style.transition = 'all 0.3s ease';
+          
           setTimeout(() => {
-            alert('축하합니다! 주변의 모든 해충을 찾았습니다.\n야외활동 시 기피제를 꼭 챙기세요!');
+            bug.remove();
+            currentScore++;
+            scoreText.textContent = currentScore;
+
+            if (currentScore === totalBugs) {
+              modal.style.display = 'block';
+            }
           }, 300);
-        }
+        });
+
+        gameCanvas.appendChild(bug);
       });
+    }
+
+    // 시작
+    window.addEventListener('DOMContentLoaded', () => {
+      startCamera();
+      spawnBugs();
     });
   </script>
 </body>
