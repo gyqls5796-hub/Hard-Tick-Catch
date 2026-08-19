@@ -3,17 +3,19 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>숨은 참진드기 찾기 AR</title>
+  <title>참진드기 탐색 AR</title>
   
   <style>
     body {
       margin: 0;
       overflow: hidden;
-      font-family: 'Pretendard', sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background-color: #000;
+      user-select: none;
+      -webkit-user-select: none;
     }
 
-    /* 실제 스마트폰 카메라 배경 비디오 */
+    /* 스마트폰 실제 카메라 배경 */
     #camera-feed {
       position: fixed;
       top: 0;
@@ -24,7 +26,7 @@
       z-index: 1;
     }
 
-    /* 상단 상태바 */
+    /* 상단 안내 UI */
     #ui-bar {
       position: fixed;
       top: 20px;
@@ -33,61 +35,91 @@
       z-index: 100;
       background: rgba(0, 0, 0, 0.75);
       color: #fff;
-      padding: 12px 24px;
+      padding: 10px 20px;
       border-radius: 30px;
-      font-size: 16px;
+      font-size: 15px;
       font-weight: bold;
       box-shadow: 0 4px 10px rgba(0,0,0,0.3);
       text-align: center;
       white-space: nowrap;
     }
 
-    /* 게임 캔버스 (캐릭터들이 떠다니는 레이어) */
-    #game-canvas {
+    /* 센서 권한 요청 시작 화면 */
+    #start-screen {
       position: fixed;
       top: 0;
       left: 0;
       width: 100vw;
       height: 100vh;
-      z-index: 10;
+      background: rgba(0, 0, 0, 0.85);
+      z-index: 500;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      color: white;
+      text-align: center;
+      padding: 20px;
+      box-sizing: border-box;
     }
 
-    /* 해충 캐릭터 아이콘 */
-    .bug-target {
-      position: absolute;
-      width: 80px;
-      height: 80px;
+    #start-screen h1 {
+      font-size: 24px;
+      margin-bottom: 12px;
+      color: #4CAF50;
+    }
+
+    #start-screen p {
+      font-size: 15px;
+      line-height: 1.6;
+      color: #eee;
+      margin-bottom: 30px;
+    }
+
+    #start-btn {
+      background: #2E7D32;
+      color: white;
+      border: none;
+      padding: 16px 36px;
+      font-size: 18px;
+      font-weight: bold;
+      border-radius: 50px;
+      box-shadow: 0 4px 15px rgba(46, 125, 50, 0.4);
       cursor: pointer;
-      transform: translate(-50%, -50%);
-      animation: floatBug 2s ease-in-out infinite alternate;
+    }
+
+    /* 360도 공간 속 진드기 */
+    .tick-entity {
+      position: fixed;
+      width: 70px;
+      height: 70px;
+      cursor: pointer;
       z-index: 20;
+      display: none;
+      transform: translate(-50%, -50%);
+      filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5));
     }
 
-    @keyframes floatBug {
-      0% { transform: translate(-50%, -50%) translateY(-10px) scale(1); }
-      100% { transform: translate(-50%, -50%) translateY(10px) scale(1.1); }
-    }
-
-    /* 홍보/성공 모달 팝업 */
+    /* 완료 팝업창 */
     #success-modal {
       display: none;
       position: fixed;
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      z-index: 200;
+      z-index: 600;
       background: #ffffff;
       padding: 24px;
       border-radius: 20px;
       width: 85%;
       max-width: 320px;
       text-align: center;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
     }
 
     #success-modal h2 {
       margin: 0 0 10px;
-      color: #e53935;
+      color: #E53935;
       font-size: 20px;
     }
 
@@ -99,11 +131,11 @@
     }
 
     #success-modal button {
-      background: #2e7d32;
+      background: #2E7D32;
       color: white;
       border: none;
-      padding: 10px 20px;
-      border-radius: 10px;
+      padding: 12px 20px;
+      border-radius: 12px;
       font-weight: bold;
       font-size: 15px;
       cursor: pointer;
@@ -113,38 +145,106 @@
 </head>
 <body>
 
-  <!-- 카메라 스트림 영상 -->
+  <!-- 시작 및 권한 허용 화면 -->
+  <div id="start-screen">
+    <h1>🕷️ 참진드기 찾기 AR</h1>
+    <p>
+      스마트폰을 상하좌우로 천천히 움직여<br>
+      주변 공간에 숨어있는 참진드기 3마리를 찾아보세요!
+    </p>
+    <button id="start-btn">탐색 시작하기</button>
+  </div>
+
+  <!-- 카메라 배경 스트림 -->
   <video id="camera-feed" autoplay playsinline muted></video>
 
   <!-- 상단 점수 UI -->
   <div id="ui-bar">
-    🔍 주변의 참진드기를 터치해 잡으세요! (<span id="score-text">0</span>/3)
+    📱 폰을 둘러보며 진드기를 찾으세요! (<span id="score-text">0</span>/3)
   </div>
 
-  <!-- 해충들이 생성될 영역 -->
-  <div id="game-canvas"></div>
+  <!-- 3마리의 진드기 요소 -->
+  <div id="tick1" class="tick-entity"></div>
+  <div id="tick2" class="tick-entity"></div>
+  <div id="tick3" class="tick-entity"></div>
 
-  <!-- 홍보 안내 팝업 -->
+  <!-- 성공 팝업 -->
   <div id="success-modal">
-    <h2>🎉 해충 박멸 완료!</h2>
+    <h2>🎉 모든 진드기 발견!</h2>
     <p>
-      야외 활동 시 <strong>긴 소매 착용</strong> 및 <strong>기피제 뿌리기</strong>를 잊지 마세요!<br><br>
-      귀가 후에는 즉시 샤워하고 옷을 털어 세탁해야 진드기 매개 감염병을 예방할 수 있습니다.
+      참진드기는 풀숲이나 나무 주변에 숨어있습니다.<br><br>
+      야외활동 시 <strong>기피제 분사</strong> 및 <strong>긴 옷 착용</strong>으로 진드기 매개 감염병(SFTS)을 예방하세요!
     </p>
-    <button onclick="location.reload()">다시 하기</button>
+    <button onclick="location.reload()">다시 찾기</button>
   </div>
 
   <script>
-    const scoreText = document.getElementById('score-text');
-    const gameCanvas = document.getElementById('game-canvas');
-    const modal = document.getElementById('success-modal');
-    const video = document.getElementById('camera-feed');
+    // 진드기 SVG 그래픽
+    const tickSVG = `
+      <svg viewBox="0 0 100 100" width="100%" height="100%">
+        <ellipse cx="50" cy="58" rx="24" ry="28" fill="#5D4037"/>
+        <ellipse cx="50" cy="58" rx="19" ry="23" fill="#3E2723"/>
+        <ellipse cx="50" cy="30" rx="13" ry="11" fill="#212121"/>
+        <circle cx="44" cy="27" r="2" fill="#fff"/>
+        <circle cx="56" cy="27" r="2" fill="#fff"/>
+        <path d="M26 48 Q 10 32 6 45" stroke="#212121" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+        <path d="M26 58 Q 8 58 5 68" stroke="#212121" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+        <path d="M26 68 Q 10 82 8 92" stroke="#212121" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+        <path d="M74 48 Q 90 32 94 45" stroke="#212121" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+        <path d="M74 58 Q 92 58 95 68" stroke="#212121" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+        <path d="M74 68 Q 90 82 92 92" stroke="#212121" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+      </svg>
+    `;
+
+    // 360도 공간에 배치할 각도 (yaw: 좌우 각도, pitch: 상하 각도)
+    // 폰을 정면(0도)에서 좌우/위아래로 돌려야 발견되도록 서로 멀리 배치
+    const bugs = [
+      { id: 'tick1', yaw: -45, pitch: 10, caught: false },  // 왼쪽 약간 위
+      { id: 'tick2', yaw: 60,  pitch: -15, caught: false }, // 오른쪽 아래
+      { id: 'tick3', yaw: 140, pitch: 5, caught: false }    // 뒤쪽/오른쪽 멀리
+    ];
 
     let currentScore = 0;
-    const totalBugs = 3;
+    let initialAlpha = null;
+    let curAlpha = 0, curBeta = 0, curGamma = 0;
 
-    // 1. 카메라 시작
-    async function startCamera() {
+    const startBtn = document.getElementById('start-btn');
+    const startScreen = document.getElementById('start-screen');
+    const video = document.getElementById('camera-feed');
+    const scoreText = document.getElementById('score-text');
+    const modal = document.getElementById('success-modal');
+
+    // 각 진드기에 SVG 삽입 및 터치 이벤트
+    bugs.forEach(bug => {
+      const el = document.getElementById(bug.id);
+      el.innerHTML = tickSVG;
+      
+      const onCatch = (e) => {
+        e.stopPropagation();
+        if (bug.caught) return;
+        bug.caught = true;
+        
+        el.style.transform = 'translate(-50%, -50%) scale(0)';
+        el.style.transition = 'all 0.3s ease';
+        
+        setTimeout(() => {
+          el.style.display = 'none';
+          currentScore++;
+          scoreText.textContent = currentScore;
+          
+          if (currentScore === bugs.length) {
+            modal.style.display = 'block';
+          }
+        }, 300);
+      };
+
+      el.addEventListener('click', onCatch);
+      el.addEventListener('touchstart', onCatch);
+    });
+
+    // 시작 버튼 클릭 시 권한 요청 및 시작
+    startBtn.addEventListener('click', async () => {
+      // 1. 카메라 시작
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: { ideal: "environment" } },
@@ -152,68 +252,68 @@
         });
         video.srcObject = stream;
       } catch (err) {
-        console.warn("카메라 권한 오류 또는 데스크톱 환경:", err);
+        console.warn("카메라 연결 실패:", err);
       }
+
+      // 2. 아이폰(iOS) 모션 센서 권한 요청
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        try {
+          const permission = await DeviceOrientationEvent.requestPermission();
+          if (permission === 'granted') {
+            window.addEventListener('deviceorientation', handleOrientation);
+          } else {
+            alert('주변을 탐색하려면 동작 센서 허용이 필요합니다.');
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      } else {
+        // 안드로이드 등 일반 브라우저
+        window.addEventListener('deviceorientation', handleOrientation);
+      }
+
+      startScreen.style.display = 'none';
+    });
+
+    function handleOrientation(e) {
+      if (initialAlpha === null && e.alpha !== null) {
+        initialAlpha = e.alpha;
+      }
+
+      // 스마트폰 방향 계산 (좌우 회전, 상하 각도)
+      curAlpha = e.alpha - initialAlpha;
+      curBeta = e.beta; // 앞뒤 기울기 (-180 ~ 180)
+      
+      renderBugs();
     }
 
-    // 2. 진드기 SVG 그래픽 생성 함수
-    function createTickSVG() {
-      return `
-        <svg viewBox="0 0 100 100" width="100%" height="100%" filter="drop-shadow(0px 5px 5px rgba(0,0,0,0.5))">
-          <ellipse cx="50" cy="55" rx="25" ry="30" fill="#4E342E"/>
-          <ellipse cx="50" cy="55" rx="20" ry="25" fill="#6D4C41"/>
-          <ellipse cx="50" cy="28" rx="14" ry="12" fill="#2E1C14"/>
-          <!-- 다리 -->
-          <path d="M25 45 Q 10 30 5 45" stroke="#2E1C14" stroke-width="4" fill="none"/>
-          <path d="M25 55 Q 10 55 5 65" stroke="#2E1C14" stroke-width="4" fill="none"/>
-          <path d="M25 65 Q 10 80 8 90" stroke="#2E1C14" stroke-width="4" fill="none"/>
-          <path d="M75 45 Q 90 30 95 45" stroke="#2E1C14" stroke-width="4" fill="none"/>
-          <path d="M75 55 Q 90 55 95 65" stroke="#2E1C14" stroke-width="4" fill="none"/>
-          <path d="M75 65 Q 90 80 92 90" stroke="#2E1C14" stroke-width="4" fill="none"/>
-        </svg>
-      `;
-    }
+    function renderBugs() {
+      const fovX = 65; // 스마트폰 가로 시야각 범위 (약 65도)
+      const fovY = 80; // 스마트폰 세로 시야각 범위 (약 80도)
+      const width = window.innerWidth;
+      const height = window.innerHeight;
 
-    // 3. 해충 배치
-    function spawnBugs() {
-      const positions = [
-        { x: 25, y: 35 },
-        { x: 75, y: 55 },
-        { x: 45, y: 75 }
-      ];
+      bugs.forEach(bug => {
+        if (bug.caught) return;
+        const el = document.getElementById(bug.id);
 
-      positions.forEach((pos, idx) => {
-        const bug = document.createElement('div');
-        bug.className = 'bug-target';
-        bug.style.left = `${pos.x}%`;
-        bug.style.top = `${pos.y}%`;
-        bug.innerHTML = createTickSVG();
+        // 사용자가 바라보는 방향과의 각도 차이 계산
+        let diffYaw = ((bug.yaw - curAlpha) % 360 + 540) % 360 - 180;
+        let diffPitch = bug.pitch - (curBeta - 60); // 폰을 들고 있는 기본 각도(약 60도) 보정
 
-        bug.addEventListener('click', (e) => {
-          e.stopPropagation();
-          bug.style.transform = 'translate(-50%, -50%) scale(0)';
-          bug.style.transition = 'all 0.3s ease';
-          
-          setTimeout(() => {
-            bug.remove();
-            currentScore++;
-            scoreText.textContent = currentScore;
+        // 화면 시야 범위(FOV) 안에 들어왔는지 검사
+        if (Math.abs(diffYaw) < fovX / 2 && Math.abs(diffPitch) < fovY / 2) {
+          const screenX = width / 2 + (diffYaw / (fovX / 2)) * (width / 2);
+          const screenY = height / 2 - (diffPitch / (fovY / 2)) * (height / 2);
 
-            if (currentScore === totalBugs) {
-              modal.style.display = 'block';
-            }
-          }, 300);
-        });
-
-        gameCanvas.appendChild(bug);
+          el.style.display = 'block';
+          el.style.left = `${screenX}px`;
+          el.style.top = `${screenY}px`;
+        } else {
+          el.style.display = 'none'; // 화면 밖을 보고 있으면 숨김
+        }
       });
     }
-
-    // 시작
-    window.addEventListener('DOMContentLoaded', () => {
-      startCamera();
-      spawnBugs();
-    });
   </script>
 </body>
 </html>
