@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>숨은 해충 찾기 AR</title>
+  <!-- A-Frame 라이브러리 로드 -->
+  <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+  
+  <style>
+    body { margin: 0; overflow: hidden; font-family: sans-serif; }
+    #ui-container {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1000;
+      background: rgba(0, 0, 0, 0.7);
+      color: #fff;
+      padding: 10px 20px;
+      border-radius: 20px;
+      font-weight: bold;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <!-- 상단 점수 UI -->
+  <div id="ui-container">
+    잡은 해충: <span id="score">0</span> / 3
+  </div>
+
+  <a-scene embedded vr-mode-ui="enabled: false" raycaster="objects: .clickable" cursor="rayOrigin: mouse">
+    <!-- 카메라 및 센서 시점 -->
+    <a-camera position="0 1.6 0" look-controls="enabled: true"></a-camera>
+
+    <!-- 배경 조명 -->
+    <a-light type="ambient" intensity="1"></a-light>
+    <a-light type="directional" position="0 10 0" intensity="0.5"></a-light>
+
+    <!-- 1번 해충 (전방) -->
+    <!-- 3D 모델 교체 시: <a-entity gltf-model="url(mosquito.glb)" ...></a-entity> -->
+    <a-sphere class="clickable" position="0 1.5 -3" radius="0.4" color="#FF5722"
+              animation="property: position; to: 0 1.8 -3; dir: alternate; loop: true; dur: 1000">
+      <a-text value="진드기" align="center" position="0 0.6 0" scale="1.5 1.5 1.5" color="#FFF"></a-text>
+    </a-sphere>
+
+    <!-- 2번 해충 (우측) -->
+    <a-sphere class="clickable" position="3 1.2 -1" radius="0.35" color="#4CAF50"
+              animation="property: position; to: 3 1.5 -1; dir: alternate; loop: true; dur: 800">
+      <a-text value="모기" align="center" position="0 0.6 0" scale="1.5 1.5 1.5" color="#FFF"></a-text>
+    </a-sphere>
+
+    <!-- 3번 해충 (좌측) -->
+    <a-sphere class="clickable" position="-2.5 1.8 -2" radius="0.4" color="#E91E63"
+              animation="property: position; to: -2.5 1.4 -2; dir: alternate; loop: true; dur: 1200">
+      <a-text value="진드기" align="center" position="0 0.6 0" scale="1.5 1.5 1.5" color="#FFF"></a-text>
+    </a-sphere>
+  </a-scene>
+
+  <script>
+    let score = 0;
+    const scoreElement = document.getElementById('score');
+    const bugs = document.querySelectorAll('.clickable');
+
+    // 캐릭터 클릭(터치) 이벤트
+    bugs.forEach(bug => {
+      bug.addEventListener('click', function () {
+        // 잡았을 때 사라지는 애니메이션 효과
+        this.setAttribute('visible', 'false');
+        // 클릭 중복 방지
+        this.classList.remove('clickable');
+        
+        score++;
+        scoreElement.textContent = score;
+
+        if (score === bugs.length) {
+          setTimeout(() => {
+            alert('축하합니다! 주변의 모든 해충을 찾았습니다.\n야외활동 시 기피제를 꼭 챙기세요!');
+          }, 300);
+        }
+      });
+    });
+  </script>
+</body>
+</html>
