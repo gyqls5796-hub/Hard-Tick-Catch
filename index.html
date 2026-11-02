@@ -1,319 +1,747 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>참진드기 탐색 AR</title>
-  
-  <style>
-    body {
-      margin: 0;
-      overflow: hidden;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background-color: #000;
-      user-select: none;
-      -webkit-user-select: none;
-    }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>반려동물 진드기 체크 & 게임</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tween.js/18.6.4/tween.umd.js"></script>
+    <style>
+        /* 웹페이지 자체의 확대/축소 및 스크롤 바운스를 완전히 차단 */
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #f3f4f6;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none; /* 브라우저 핀치 줌 방지 */
+            position: fixed;
+        }
 
-    /* 스마트폰 실제 카메라 배경 */
-    #camera-feed {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      object-fit: cover;
-      z-index: 1;
-    }
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+            touch-action: none;
+        }
 
-    /* 상단 안내 UI */
-    #ui-bar {
-      position: fixed;
-      top: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      z-index: 100;
-      background: rgba(0, 0, 0, 0.75);
-      color: #fff;
-      padding: 10px 20px;
-      border-radius: 30px;
-      font-size: 15px;
-      font-weight: bold;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-      text-align: center;
-      white-space: nowrap;
-    }
+        .ui-layer {
+            position: relative;
+            z-index: 10;
+            max-width: 440px;
+            margin: 0 auto;
+            height: 100%;
+            pointer-events: none;
+        }
 
-    /* 센서 권한 요청 시작 화면 */
-    #start-screen {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      background: rgba(0, 0, 0, 0.85);
-      z-index: 500;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      color: white;
-      text-align: center;
-      padding: 20px;
-      box-sizing: border-box;
-    }
+        .pointer-events-auto { pointer-events: auto; }
+        
+        /* [게임 모드] 진드기 마커 */
+        .tick-marker {
+            position: absolute;
+            display: none;
+            z-index: 20;
+            cursor: pointer;
+            --rot: 0deg;
+            --scale: 1;
+            width: 44px;
+            height: 44px;
+            background-image: url('tick.png');
+            background-size: 14.14px 14.14px;
+            background-repeat: no-repeat;
+            background-position: center;
+            transform: translate(-50%, -50%) rotate(var(--rot)) scale(var(--scale));
+            transition: transform 0.05s linear;
+            touch-action: manipulation;
+        }
 
-    #start-screen h1 {
-      font-size: 24px;
-      margin-bottom: 12px;
-      color: #4CAF50;
-    }
+        .desc-box { transition: opacity 0.5s ease-in-out; }
 
-    #start-screen p {
-      font-size: 15px;
-      line-height: 1.6;
-      color: #eee;
-      margin-bottom: 30px;
-    }
-
-    #start-btn {
-      background: #2E7D32;
-      color: white;
-      border: none;
-      padding: 16px 36px;
-      font-size: 18px;
-      font-weight: bold;
-      border-radius: 50px;
-      box-shadow: 0 4px 15px rgba(46, 125, 50, 0.4);
-      cursor: pointer;
-    }
-
-    /* 360도 공간 속 진드기 */
-    .tick-entity {
-      position: fixed;
-      width: 70px;
-      height: 70px;
-      cursor: pointer;
-      z-index: 20;
-      display: none;
-      transform: translate(-50%, -50%);
-      filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5));
-    }
-
-    /* 완료 팝업창 */
-    #success-modal {
-      display: none;
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      z-index: 600;
-      background: #ffffff;
-      padding: 24px;
-      border-radius: 20px;
-      width: 85%;
-      max-width: 320px;
-      text-align: center;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-    }
-
-    #success-modal h2 {
-      margin: 0 0 10px;
-      color: #E53935;
-      font-size: 20px;
-    }
-
-    #success-modal p {
-      color: #333;
-      font-size: 14px;
-      line-height: 1.6;
-      margin-bottom: 20px;
-    }
-
-    #success-modal button {
-      background: #2E7D32;
-      color: white;
-      border: none;
-      padding: 12px 20px;
-      border-radius: 12px;
-      font-weight: bold;
-      font-size: 15px;
-      cursor: pointer;
-      width: 100%;
-    }
-  </style>
+        .checkpoint-item {
+            transition: color 0.3s ease, text-decoration 0.3s ease;
+        }
+        .checkpoint-active {
+            color: #2563eb;
+            font-weight: 800;
+        }
+        .checkpoint-done {
+            color: #9ca3af;
+            text-decoration: line-through;
+            font-weight: 500;
+        }
+    </style>
 </head>
 <body>
 
-  <!-- 시작 및 권한 허용 화면 -->
-  <div id="start-screen">
-    <h1>🕷️ 참진드기 찾기 AR</h1>
-    <p>
-      스마트폰을 상하좌우로 천천히 움직여<br>
-      주변 공간에 숨어있는 참진드기 3마리를 찾아보세요!
-    </p>
-    <button id="start-btn">탐색 시작하기</button>
-  </div>
+    <div id="canvas-container"></div>
+    
+    <div id="marker1" class="tick-marker pointer-events-auto"></div>
+    <div id="marker2" class="tick-marker pointer-events-auto"></div>
+    <div id="marker3" class="tick-marker pointer-events-auto"></div>
+    <div id="marker4" class="tick-marker pointer-events-auto"></div>
+    <div id="marker5" class="tick-marker pointer-events-auto"></div>
 
-  <!-- 카메라 배경 스트림 -->
-  <video id="camera-feed" autoplay playsinline muted></video>
+    <!-- 릴스/쇼츠 mp4 영상 재생 전용 전체화면 레이어 -->
+    <div id="videoModalLayer" class="fixed inset-0 z-50 bg-black flex items-center justify-center hidden">
+        <video id="guideVideoPlayer" class="w-full h-full object-contain" playsinline preload="auto">
+            <source src="guide.mp4" type="video/mp4">
+            영상을 지원하지 않는 브라우저입니다.
+        </video>
+    </div>
 
-  <!-- 상단 점수 UI -->
-  <div id="ui-bar">
-    📱 폰을 둘러보며 진드기를 찾으세요! (<span id="score-text">0</span>/3)
-  </div>
+    <div class="ui-layer flex flex-col justify-between p-4 sm:p-5">
+        <!-- 상단 헤더 영역 -->
+        <div class="mt-2 space-y-2.5">
+            <!-- 상단 타이틀 카드 -->
+            <div id="adminResetZone" class="pointer-events-auto text-center bg-white/95 backdrop-blur-sm px-4 pt-3.5 pb-2.5 rounded-2xl shadow-sm border border-gray-100 cursor-pointer select-none active:bg-gray-100/80 transition-colors">
+                <h1 id="mainTitle" class="text-xl font-black text-gray-800 flex items-center justify-center gap-1.5 tracking-tight">
+                    🐶 나와 반려동물을 위한 진드기 체크
+                </h1>
+                
+                <!-- 첫 화면 안내 문구 -->
+                <p id="homeSubTitle" class="text-base font-semibold text-gray-600 mt-1">
+                    산책 후 필수! 우리 둘의 건강을 위해 함께 확인해요
+                </p>
 
-  <!-- 3마리의 진드기 요소 -->
-  <div id="tick1" class="tick-entity"></div>
-  <div id="tick2" class="tick-entity"></div>
-  <div id="tick3" class="tick-entity"></div>
+                <!-- 게임 모드 전용 5개 체크포인트 -->
+                <div id="checkPointsContainer" class="hidden text-base leading-snug mt-1.5 space-y-1">
+                    <div class="flex justify-center items-center gap-x-2.5">
+                        <span id="cp-0" class="checkpoint-item checkpoint-active">귓속</span>
+                        <span class="text-gray-300">•</span>
+                        <span id="cp-1" class="checkpoint-item checkpoint-active">목주변</span>
+                        <span class="text-gray-300">•</span>
+                        <span id="cp-2" class="checkpoint-item checkpoint-active">발가락사이</span>
+                    </div>
+                    <div class="flex justify-center items-center gap-x-2.5">
+                        <span id="cp-3" class="checkpoint-item checkpoint-active">꼬리(항문 및 사타구니)</span>
+                        <span class="text-gray-300">•</span>
+                        <span id="cp-4" class="checkpoint-item checkpoint-active">몸 전체</span>
+                    </div>
+                </div>
+                
+                <!-- 남은 진드기 카운트 영역 -->
+                <div id="gameScoreBoard" class="hidden mt-2 pt-1.5 border-t border-gray-100 flex justify-around items-center">
+                    <div class="text-base font-bold text-gray-700">남은 진드기</div>
+                    <div class="text-2xl font-black text-red-500 leading-none"><span id="remainCount">5</span> / 5</div>
+                </div>
 
-  <!-- 성공 팝업 -->
-  <div id="success-modal">
-    <h2>🎉 모든 진드기 발견!</h2>
-    <p>
-      참진드기는 풀숲이나 나무 주변에 숨어있습니다.<br><br>
-      야외활동 시 <strong>기피제 분사</strong> 및 <strong>긴 옷 착용</strong>으로 진드기 매개 감염병(SFTS)을 예방하세요!
-    </p>
-    <button onclick="location.reload()">다시 찾기</button>
-  </div>
+                <div id="loading-indicator" class="mt-2 text-red-500 font-bold text-base animate-pulse">
+                    3D 모델을 준비하고 있습니다...
+                </div>
+            </div>
 
-  <script>
-    // 진드기 SVG 그래픽
-    const tickSVG = `
-      <svg viewBox="0 0 100 100" width="100%" height="100%">
-        <ellipse cx="50" cy="58" rx="24" ry="28" fill="#5D4037"/>
-        <ellipse cx="50" cy="58" rx="19" ry="23" fill="#3E2723"/>
-        <ellipse cx="50" cy="30" rx="13" ry="11" fill="#212121"/>
-        <circle cx="44" cy="27" r="2" fill="#fff"/>
-        <circle cx="56" cy="27" r="2" fill="#fff"/>
-        <path d="M26 48 Q 10 32 6 45" stroke="#212121" stroke-width="4.5" stroke-linecap="round" fill="none"/>
-        <path d="M26 58 Q 8 58 5 68" stroke="#212121" stroke-width="4.5" stroke-linecap="round" fill="none"/>
-        <path d="M26 68 Q 10 82 8 92" stroke="#212121" stroke-width="4.5" stroke-linecap="round" fill="none"/>
-        <path d="M74 48 Q 90 32 94 45" stroke="#212121" stroke-width="4.5" stroke-linecap="round" fill="none"/>
-        <path d="M74 58 Q 92 58 95 68" stroke="#212121" stroke-width="4.5" stroke-linecap="round" fill="none"/>
-        <path d="M74 68 Q 90 82 92 92" stroke="#212121" stroke-width="4.5" stroke-linecap="round" fill="none"/>
-      </svg>
-    `;
+            <!-- 성별 / 연령 선택 드롭박스 카드 -->
+            <div id="userInfoSection" class="pointer-events-auto bg-white/95 backdrop-blur-sm p-4 rounded-2xl shadow-sm border border-gray-100 grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-sm font-bold text-gray-800 mb-1">성별</label>
+                    <select id="genderSelect" class="w-full bg-gray-50 border border-gray-300 text-gray-900 text-base font-bold rounded-xl p-2.5 focus:ring-2 focus:ring-amber-400 focus:outline-none">
+                        <option value="">선택해주세요</option>
+                        <option value="남성">남성</option>
+                        <option value="여성">여성</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-bold text-gray-800 mb-1">연령대</label>
+                    <select id="ageSelect" class="w-full bg-gray-50 border border-gray-300 text-gray-900 text-base font-bold rounded-xl p-2.5 focus:ring-2 focus:ring-amber-400 focus:outline-none">
+                        <option value="">선택해주세요</option>
+                        <option value="10대 이하">10대 이하</option>
+                        <option value="20대">20대</option>
+                        <option value="30대">30대</option>
+                        <option value="40대">40대</option>
+                        <option value="50대">50대</option>
+                        <option value="60대">60대</option>
+                        <option value="70대 이상">70대 이상</option>
+                    </select>
+                </div>
+            </div>
+        </div>
 
-    // 360도 공간에 배치할 각도 (yaw: 좌우 각도, pitch: 상하 각도)
-    // 폰을 정면(0도)에서 좌우/위아래로 돌려야 발견되도록 서로 멀리 배치
-    const bugs = [
-      { id: 'tick1', yaw: -45, pitch: 10, caught: false },  // 왼쪽 약간 위
-      { id: 'tick2', yaw: 60,  pitch: -15, caught: false }, // 오른쪽 아래
-      { id: 'tick3', yaw: 140, pitch: 5, caught: false }    // 뒤쪽/오른쪽 멀리
-    ];
+        <!-- 하단 영역 (버튼 및 로고) -->
+        <div class="mb-3">
+            <div id="descBox" class="desc-box opacity-0 bg-gray-900/95 text-white px-5 py-4 rounded-2xl mb-3 shadow-xl text-center border border-gray-700">
+                <p id="descText" class="text-lg sm:text-xl font-black leading-snug break-keep"></p>
+            </div>
 
-    let currentScore = 0;
-    let initialAlpha = null;
-    let curAlpha = 0, curBeta = 0, curGamma = 0;
+            <!-- 시작 메뉴 버튼 & 로고 -->
+            <div id="menuButtons" class="hidden flex flex-col items-center pointer-events-auto">
+                <div class="w-full space-y-2.5 mb-2">
+                    <button id="startGameBtn" class="w-full bg-amber-500 hover:bg-amber-600 text-white font-black py-4 px-4 rounded-2xl shadow-lg transition-all active:scale-95 text-lg flex items-center justify-center gap-2 opacity-50 cursor-not-allowed">
+                        🎮 숨은 진드기 잡기 게임
+                    </button>
+                    <button id="startVideoBtn" class="w-full bg-red-500 hover:bg-red-600 text-white font-extrabold py-3.5 px-4 rounded-2xl shadow-md transition-all active:scale-95 text-base flex items-center justify-center gap-2 opacity-50 cursor-not-allowed">
+                        ▶ 반려동물 진드기 체크 부위 확인하기
+                    </button>
+                </div>
+                <div class="flex justify-center items-center py-2">
+                    <img src="logo.png" alt="지원단 로고" class="h-14 max-w-[280px] w-auto object-contain drop-shadow-sm opacity-95" onerror="this.style.display='none'">
+                </div>
+            </div>
 
-    const startBtn = document.getElementById('start-btn');
-    const startScreen = document.getElementById('start-screen');
-    const video = document.getElementById('camera-feed');
-    const scoreText = document.getElementById('score-text');
-    const modal = document.getElementById('success-modal');
+            <!-- 최종 완료 모달창 -->
+            <div id="eventModal" class="hidden pointer-events-auto bg-white p-6 rounded-3xl shadow-2xl text-center border-4 border-red-50">
+                <div class="flex items-center justify-center gap-2 mb-2">
+                    <span class="text-3xl">🎉</span>
+                    <h2 id="modalTitle" class="text-3xl font-black text-gray-800">진드기 완벽 퇴치!</h2>
+                </div>
 
-    // 각 진드기에 SVG 삽입 및 터치 이벤트
-    bugs.forEach(bug => {
-      const el = document.getElementById(bug.id);
-      el.innerHTML = tickSVG;
-      
-      const onCatch = (e) => {
-        e.stopPropagation();
-        if (bug.caught) return;
-        bug.caught = true;
-        
-        el.style.transform = 'translate(-50%, -50%) scale(0)';
-        el.style.transition = 'all 0.3s ease';
-        
-        setTimeout(() => {
-          el.style.display = 'none';
-          currentScore++;
-          scoreText.textContent = currentScore;
-          
-          if (currentScore === bugs.length) {
-            modal.style.display = 'block';
-          }
-        }, 300);
-      };
+                <!-- 1. 미참여 시 표시되는 선물 수령 영역 -->
+                <div id="freshUserSection">
+                    <p class="text-gray-700 text-base font-bold mb-4 leading-normal">
+                        팔로우나 구독하고 현장요원에게 화면을 보여주세요
+                    </p>
+                    <div class="space-y-3">
+                        <button id="instaBtn" class="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-black py-4 px-4 rounded-xl hover:opacity-90 shadow-md text-lg active:scale-95">
+                            인스타그램 팔로우
+                        </button>
+                        <button id="youtubeBtn" class="w-full flex items-center justify-center gap-2 bg-red-600 text-white font-black py-4 px-4 rounded-xl hover:opacity-90 shadow-md text-lg active:scale-95">
+                            유튜브 구독하기
+                        </button>
+                    </div>
+                </div>
 
-      el.addEventListener('click', onCatch);
-      el.addEventListener('touchstart', onCatch);
-    });
+                <!-- 2. 이미 선물을 수령한 경우 표시되는 중복 차단 영역 -->
+                <div id="alreadyJoinedSection" class="hidden my-3 p-4 bg-amber-50 rounded-xl border border-amber-200">
+                    <div class="text-4xl mb-1">🎁</div>
+                    <p class="text-base font-black text-amber-900 mb-0.5">이미 이벤트 선물을 수령하셨습니다</p>
+                    <p class="text-sm font-semibold text-amber-700">선물 증정은 1인 1회로 제한됩니다.<br>참여해 주셔서 감사합니다!</p>
+                </div>
 
-    // 시작 버튼 클릭 시 권한 요청 및 시작
-    startBtn.addEventListener('click', async () => {
-      // 1. 카메라 시작
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" } },
-          audio: false
+                <!-- 공통 하단 버튼 -->
+                <div class="space-y-3 mt-3.5">
+                    <button onclick="window.open('http://gncdc.or.kr/', '_blank')" title="경상남도감염병관리지원단 홈페이지 바로가기" class="w-full flex items-center justify-center bg-white border border-gray-200 hover:border-gray-300 hover:bg-gray-50 py-3 px-4 rounded-xl shadow-sm transition-all active:scale-95">
+                        <img src="logo.png" alt="경상남도감염병관리지원단 홈페이지 이동" class="h-10 max-w-[260px] w-auto object-contain">
+                    </button>
+                    
+                    <button id="replayBtn" class="w-full flex items-center justify-center gap-2 bg-gray-600 text-white font-bold py-3.5 px-4 rounded-xl hover:bg-gray-700 text-base mt-1">
+                        🔄 다시 하기 / 처음으로
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 모바일 사파리 등에서 핀치 줌 제스처 방어
+        document.addEventListener('gesturestart', function (e) { e.preventDefault(); });
+        document.addEventListener('gesturechange', function (e) { e.preventDefault(); });
+        document.addEventListener('gestureend', function (e) { e.preventDefault(); });
+
+        const GOOGLE_SHEET_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycby2irHshS-7F04tlUAipYDwJhHdsyq4RgIMtAyhV4WyFiCnhc4Q-0MW7JBLZmRhudf8RA/exec';
+        const STORAGE_KEY = 'gncdc_puppy_check_participated';
+        const STORAGE_GENDER_KEY = 'gncdc_saved_gender';
+        const STORAGE_AGE_KEY = 'gncdc_saved_age';
+
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color('#f3f4f6');
+
+        // [개선] near 거리를 0.01로 대폭 낮춰 가까이 확대해도 모델 표면이 싹둑 잘리지 않음
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.01, 100);
+        camera.position.set(0, 0.5, 6.5); 
+        camera.lookAt(0, -0.5, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        container.appendChild(renderer.domElement);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.08;
+        controls.target.set(0, -0.5, 0);
+
+        // [개선] 줌 거리 한계값을 안전하게 설정 (너무 가까워서 몸속을 뚫거나, 너무 멀어서 점이 되지 않도록 방어)
+        controls.minDistance = 2.8; 
+        controls.maxDistance = 7.5;
+        controls.enablePan = false; // 화면 이동(패닝)으로 엉뚱한 곳으로 날아가는 현상 차단
+        controls.enabled = false;
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.75);
+        scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.85);
+        dirLight.position.set(5, 10, 5);
+        scene.add(dirLight);
+
+        const dogGroup = new THREE.Group();
+        scene.add(dogGroup);
+
+        const loader = new THREE.GLTFLoader();
+        loader.load(
+            '3d puppy.glb', 
+            function (gltf) {
+                const model = gltf.scene;
+                model.rotation.x = -Math.PI / 2; 
+                const wrapper = new THREE.Group();
+                wrapper.add(model);
+                wrapper.rotation.y = Math.PI / 2; 
+
+                const box = new THREE.Box3().setFromObject(wrapper);
+                const center = box.getCenter(new THREE.Vector3());
+                const size = box.getSize(new THREE.Vector3());
+                
+                const maxDim = Math.max(size.x, size.y, size.z);
+                const targetSize = 3.5; 
+                const scale = targetSize / maxDim;
+                
+                wrapper.scale.setScalar(scale);
+                wrapper.position.sub(center.multiplyScalar(scale)); 
+                wrapper.position.y -= 0.5; 
+
+                dogGroup.add(wrapper);
+
+                document.getElementById('loading-indicator').style.display = 'none';
+                document.getElementById('menuButtons').classList.remove('hidden');
+                
+                initStoredUserInfo();
+            },
+            undefined,
+            function (error) {
+                console.error('모델 로드 실패:', error);
+                document.getElementById('loading-indicator').innerText = '모델 로드 실패. 파일명을 확인하세요.';
+            }
+        );
+
+        let adminClickCount = 0;
+        let adminClickTimer = null;
+        document.getElementById('adminResetZone').addEventListener('click', () => {
+            adminClickCount++;
+            clearTimeout(adminClickTimer);
+
+            adminClickTimer = setTimeout(() => {
+                adminClickCount = 0;
+            }, 1500);
+
+            if (adminClickCount >= 3) {
+                adminClickCount = 0;
+                localStorage.removeItem(STORAGE_KEY);
+                localStorage.removeItem(STORAGE_GENDER_KEY);
+                localStorage.removeItem(STORAGE_AGE_KEY);
+                alert('🔑 [현장요원] 모든 참가 기록 및 입력 정보가 초기화되었습니다!\n새로운 참가자가 시작할 수 있습니다.');
+                resetToHome(true);
+            }
         });
-        video.srcObject = stream;
-      } catch (err) {
-        console.warn("카메라 연결 실패:", err);
-      }
 
-      // 2. 아이폰(iOS) 모션 센서 권한 요청
-      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-        try {
-          const permission = await DeviceOrientationEvent.requestPermission();
-          if (permission === 'granted') {
-            window.addEventListener('deviceorientation', handleOrientation);
-          } else {
-            alert('주변을 탐색하려면 동작 센서 허용이 필요합니다.');
-          }
-        } catch (e) {
-          console.error(e);
+        function updateModalGiftState() {
+            const hasJoined = localStorage.getItem(STORAGE_KEY);
+            const freshUserSection = document.getElementById('freshUserSection');
+            const alreadyJoinedSection = document.getElementById('alreadyJoinedSection');
+
+            if (hasJoined === 'true') {
+                freshUserSection.classList.add('hidden');
+                alreadyJoinedSection.classList.remove('hidden');
+            } else {
+                freshUserSection.classList.remove('hidden');
+                alreadyJoinedSection.classList.add('hidden');
+            }
         }
-      } else {
-        // 안드로이드 등 일반 브라우저
-        window.addEventListener('deviceorientation', handleOrientation);
-      }
 
-      startScreen.style.display = 'none';
-    });
+        const baseMarkerPositions = [
+            new THREE.Vector3(1.18, 0.70, -0.21),
+            new THREE.Vector3(1.12, -0.10, 0.04),
+            new THREE.Vector3(0.73, -1.81, -0.22),
+            new THREE.Vector3(-1.35, -0.50, 0.0),
+            new THREE.Vector3(-0.08, -0.28, -0.39)
+        ];
 
-    function handleOrientation(e) {
-      if (initialAlpha === null && e.alpha !== null) {
-        initialAlpha = e.alpha;
-      }
+        const tickMoveParams = [
+            { speedX: 2.3, speedY: 1.8, rangeX: 0.04, rangeY: 0.04, phase: 0.5, baseRot: 45 },
+            { speedX: 1.9, speedY: 2.5, rangeX: 0.035, rangeY: 0.05, phase: 1.2, baseRot: 120 },
+            { speedX: 2.7, speedY: 2.1, rangeX: 0.03, rangeY: 0.04, phase: 2.8, baseRot: 210 },
+            { speedX: 1.6, speedY: 2.4, rangeX: 0.045, rangeY: 0.035, phase: 3.5, baseRot: 290 },
+            { speedX: 2.2, speedY: 1.9, rangeX: 0.05, rangeY: 0.045, phase: 4.1, baseRot: 15 }
+        ];
 
-      // 스마트폰 방향 계산 (좌우 회전, 상하 각도)
-      curAlpha = e.alpha - initialAlpha;
-      curBeta = e.beta; // 앞뒤 기울기 (-180 ~ 180)
-      
-      renderBugs();
-    }
+        let htmlMarkers = [
+            document.getElementById('marker1'),
+            document.getElementById('marker2'),
+            document.getElementById('marker3'),
+            document.getElementById('marker4'),
+            document.getElementById('marker5')
+        ];
 
-    function renderBugs() {
-      const fovX = 65; // 스마트폰 가로 시야각 범위 (약 65도)
-      const fovY = 80; // 스마트폰 세로 시야각 범위 (약 80도)
-      const width = window.innerWidth;
-      const height = window.innerHeight;
+        let isIdle = true;
+        let isGameMode = false;
+        let activeTickFlags = [false, false, false, false, false];
+        let remainTicks = 5;
 
-      bugs.forEach(bug => {
-        if (bug.caught) return;
-        const el = document.getElementById(bug.id);
+        let userGender = '';
+        let userAge = '';
+        let currentMode = ''; 
 
-        // 사용자가 바라보는 방향과의 각도 차이 계산
-        let diffYaw = ((bug.yaw - curAlpha) % 360 + 540) % 360 - 180;
-        let diffPitch = bug.pitch - (curBeta - 60); // 폰을 들고 있는 기본 각도(약 60도) 보정
+        const genderSelect = document.getElementById('genderSelect');
+        const ageSelect = document.getElementById('ageSelect');
+        const startGameBtn = document.getElementById('startGameBtn');
+        const startVideoBtn = document.getElementById('startVideoBtn');
+        const userInfoSection = document.getElementById('userInfoSection');
 
-        // 화면 시야 범위(FOV) 안에 들어왔는지 검사
-        if (Math.abs(diffYaw) < fovX / 2 && Math.abs(diffPitch) < fovY / 2) {
-          const screenX = width / 2 + (diffYaw / (fovX / 2)) * (width / 2);
-          const screenY = height / 2 - (diffPitch / (fovY / 2)) * (height / 2);
+        function initStoredUserInfo() {
+            const savedGender = localStorage.getItem(STORAGE_GENDER_KEY);
+            const savedAge = localStorage.getItem(STORAGE_AGE_KEY);
 
-          el.style.display = 'block';
-          el.style.left = `${screenX}px`;
-          el.style.top = `${screenY}px`;
-        } else {
-          el.style.display = 'none'; // 화면 밖을 보고 있으면 숨김
+            if (savedGender && savedAge) {
+                userGender = savedGender;
+                userAge = savedAge;
+                genderSelect.value = savedGender;
+                ageSelect.value = savedAge;
+                userInfoSection.classList.add('hidden');
+                startGameBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                startVideoBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            } else {
+                checkInputsValid();
+            }
         }
-      });
-    }
-  </script>
+
+        function checkInputsValid() {
+            userGender = genderSelect.value;
+            userAge = ageSelect.value;
+            const isValid = (userGender !== '') && (userAge !== '');
+
+            if (isValid) {
+                localStorage.setItem(STORAGE_GENDER_KEY, userGender);
+                localStorage.setItem(STORAGE_AGE_KEY, userAge);
+                startGameBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                startVideoBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            } else {
+                startGameBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                startVideoBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            }
+            return isValid;
+        }
+
+        genderSelect.addEventListener('change', checkInputsValid);
+        ageSelect.addEventListener('change', checkInputsValid);
+
+        function sendStatsToGoogleSheet(choiceType) {
+            if (!GOOGLE_SHEET_WEBAPP_URL) return;
+
+            fetch(GOOGLE_SHEET_WEBAPP_URL, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    gender: userGender || '미선택',
+                    age: userAge || '미선택',
+                    choice: choiceType,
+                    mode: currentMode || '미확인'
+                })
+            }).catch(err => console.error('전송 실패:', err));
+        }
+
+        document.getElementById('instaBtn').addEventListener('click', () => {
+            localStorage.setItem(STORAGE_KEY, 'true');
+            sendStatsToGoogleSheet('인스타그램');
+            updateModalGiftState();
+            window.open('https://www.instagram.com/gncdc_2019/', '_blank');
+        });
+
+        document.getElementById('youtubeBtn').addEventListener('click', () => {
+            localStorage.setItem(STORAGE_KEY, 'true');
+            sendStatsToGoogleSheet('유튜브');
+            updateModalGiftState();
+            window.open('https://www.youtube.com/@%EA%B2%BD%EC%83%81%EB%82%A8%EB%8F%84%EA%B0%90%EC%97%BC%EB%B3%91%EA%B4%80%EB%A6%AC%EC%A7%80', '_blank');
+        });
+
+        const occlusionRaycaster = new THREE.Raycaster();
+
+        function moveCamera(targetPos, lookAtPos, duration) {
+            return new Promise(resolve => {
+                const startPos = camera.position.clone();
+                new TWEEN.Tween(startPos)
+                    .to(targetPos, duration)
+                    .easing(TWEEN.Easing.Cubic.InOut)
+                    .onUpdate(() => {
+                        camera.position.copy(startPos);
+                        camera.lookAt(lookAtPos);
+                    })
+                    .onComplete(() => {
+                        camera.lookAt(lookAtPos);
+                        resolve();
+                    })
+                    .start();
+            });
+        }
+
+        function updateMarkerPosition(markerElement, localPos, index, elapsedTime) {
+            const worldPos = localPos.clone().applyMatrix4(dogGroup.matrixWorld);
+            const toMarker = worldPos.clone().sub(camera.position);
+            const dist = toMarker.length();
+            const dir = toMarker.clone().normalize();
+            
+            const camDir = new THREE.Vector3();
+            camera.getWorldDirection(camDir);
+            if (dir.dot(camDir) <= 0) {
+                markerElement.style.display = 'none';
+                return;
+            }
+
+            if (isGameMode) {
+                occlusionRaycaster.set(camera.position, dir);
+                const intersects = occlusionRaycaster.intersectObject(dogGroup, true);
+                if (intersects.length > 0 && intersects[0].distance < dist - 0.45) {
+                    markerElement.style.display = 'none';
+                    return;
+                }
+            }
+
+            const dynamicScale = Math.min(Math.max(6.06 / dist, 0.81), 3.03);
+            markerElement.style.setProperty('--scale', dynamicScale.toFixed(2));
+
+            const param = tickMoveParams[index];
+            const wiggleRot = param.baseRot + Math.sin(elapsedTime * 6 + param.phase) * 18;
+            markerElement.style.setProperty('--rot', `${wiggleRot.toFixed(1)}deg`);
+
+            const vector = worldPos.clone().project(camera);
+            const x = (vector.x * .5 + .5) * window.innerWidth;
+            const y = (vector.y * -.5 + .5) * window.innerHeight;
+            markerElement.style.left = `${x}px`;
+            markerElement.style.top = `${y}px`;
+            markerElement.style.display = 'block';
+        }
+
+        const descBox = document.getElementById('descBox');
+        const descText = document.getElementById('descText');
+        function showDescription(htmlContent) {
+            descText.innerHTML = htmlContent;
+            descBox.style.opacity = '1';
+        }
+
+        const videoModalLayer = document.getElementById('videoModalLayer');
+        const guideVideoPlayer = document.getElementById('guideVideoPlayer');
+
+        function openAndPlayGuideVideo() {
+            if (!checkInputsValid()) {
+                alert('상단에서 성별과 연령대를 먼저 선택해주세요!');
+                return;
+            }
+
+            currentMode = '영상';
+
+            document.getElementById('menuButtons').classList.add('hidden');
+            userInfoSection.classList.add('hidden');
+            document.getElementById('eventModal').classList.add('hidden');
+            isIdle = false;
+
+            videoModalLayer.classList.remove('hidden');
+            guideVideoPlayer.currentTime = 0;
+            guideVideoPlayer.muted = false;
+            guideVideoPlayer.play().catch(err => {
+                console.log('소리 켠 상태 재생 실패, 음소거 시도:', err);
+                guideVideoPlayer.muted = true;
+                guideVideoPlayer.play();
+            });
+        }
+
+        function finishVideo() {
+            guideVideoPlayer.pause();
+            videoModalLayer.classList.add('hidden');
+            isIdle = true;
+
+            document.getElementById('modalTitle').innerText = '진드기 교육 완료!';
+            updateModalGiftState();
+            document.getElementById('eventModal').classList.remove('hidden');
+        }
+
+        guideVideoPlayer.addEventListener('ended', finishVideo);
+
+        function resetCheckPointsUI() {
+            for (let i = 0; i < 5; i++) {
+                const el = document.getElementById(`cp-${i}`);
+                if (el) {
+                    el.classList.remove('checkpoint-done');
+                    el.classList.add('checkpoint-active');
+                }
+            }
+        }
+
+        function completeCheckPointUI(index) {
+            const el = document.getElementById(`cp-${index}`);
+            if (el) {
+                el.classList.remove('checkpoint-active');
+                el.classList.add('checkpoint-done');
+            }
+        }
+
+        async function runGameMode() {
+            if (!checkInputsValid()) {
+                alert('상단에서 성별과 연령대를 먼저 선택해주세요!');
+                return;
+            }
+
+            currentMode = '게임';
+
+            document.getElementById('mainTitle').innerText = '🐶 진드기 체크 포인트';
+            document.getElementById('homeSubTitle').classList.add('hidden');
+            document.getElementById('checkPointsContainer').classList.remove('hidden');
+
+            document.getElementById('menuButtons').classList.add('hidden');
+            userInfoSection.classList.add('hidden');
+            document.getElementById('eventModal').classList.add('hidden');
+            isIdle = false;
+            isGameMode = true;
+            controls.enabled = true;
+            
+            remainTicks = 5;
+            document.getElementById('remainCount').innerText = remainTicks;
+            document.getElementById('gameScoreBoard').classList.remove('hidden');
+            resetCheckPointsUI();
+
+            new TWEEN.Tween(dogGroup.rotation)
+                .to({ y: 0 }, 800)
+                .easing(TWEEN.Easing.Quadratic.Out)
+                .start();
+            await moveCamera(new THREE.Vector3(0, 0.5, 5.2), new THREE.Vector3(0, -0.5, 0), 800);
+
+            showDescription('강아지를 돌리고 확대해보며 숨은 진드기 5마리를 찾아 터치하세요!');
+
+            for (let i = 0; i < 5; i++) {
+                activeTickFlags[i] = true;
+                tickMoveParams[i].baseRot = Math.floor(Math.random() * 360);
+            }
+        }
+
+        const pointNames = ['귓속', '목주변', '발가락사이', '꼬리(항문 및 사타구니)', '몸 전체'];
+
+        htmlMarkers.forEach((marker, index) => {
+            marker.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (!isGameMode || !activeTickFlags[index]) return;
+
+                activeTickFlags[index] = false;
+                marker.style.display = 'none';
+
+                completeCheckPointUI(index);
+
+                remainTicks--;
+                document.getElementById('remainCount').innerText = remainTicks;
+
+                if (remainTicks === 0) {
+                    endGame();
+                } else {
+                    showDescription(`
+                        <div class="text-xl sm:text-2xl font-black text-white tracking-tight">
+                            [${pointNames[index]}] 진드기 발견!
+                        </div>
+                        <div class="text-base sm:text-lg font-extrabold text-amber-300 mt-1">
+                            남은 진드기: ${remainTicks}마리
+                        </div>
+                    `);
+                }
+            });
+        });
+
+        async function endGame() {
+            isGameMode = false;
+            controls.enabled = false;
+            document.getElementById('gameScoreBoard').classList.add('hidden');
+            descBox.style.opacity = '0';
+
+            await moveCamera(new THREE.Vector3(0, 0.5, 6.5), new THREE.Vector3(0, -0.5, 0), 1200);
+            isIdle = true;
+
+            document.getElementById('modalTitle').innerText = '진드기 완벽 퇴치!';
+            updateModalGiftState();
+            document.getElementById('eventModal').classList.remove('hidden');
+        }
+
+        function resetToHome(isHardReset = false) {
+            document.getElementById('eventModal').classList.add('hidden');
+            document.getElementById('gameScoreBoard').classList.add('hidden');
+            descBox.style.opacity = '0';
+            
+            document.getElementById('mainTitle').innerText = '🐶 나와 반려동물을 위한 진드기 체크';
+            document.getElementById('homeSubTitle').classList.remove('hidden');
+            document.getElementById('checkPointsContainer').classList.add('hidden');
+
+            for (let i = 0; i < 5; i++) {
+                activeTickFlags[i] = false;
+                htmlMarkers[i].style.display = 'none';
+            }
+
+            resetCheckPointsUI();
+
+            controls.enabled = false;
+            camera.position.set(0, 0.5, 6.5);
+            camera.lookAt(0, -0.5, 0);
+            controls.target.set(0, -0.5, 0);
+
+            isIdle = true;
+            isGameMode = false;
+            currentMode = '';
+            
+            document.getElementById('menuButtons').classList.remove('hidden');
+
+            if (isHardReset) {
+                genderSelect.value = '';
+                ageSelect.value = '';
+                userGender = '';
+                userAge = '';
+                userInfoSection.classList.remove('hidden');
+                checkInputsValid();
+            } else {
+                initStoredUserInfo();
+            }
+        }
+
+        document.getElementById('startVideoBtn').addEventListener('click', openAndPlayGuideVideo);
+        document.getElementById('startGameBtn').addEventListener('click', runGameMode);
+        document.getElementById('replayBtn').addEventListener('click', () => resetToHome(false));
+
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            TWEEN.update();
+
+            const elapsedTime = clock.getElapsedTime();
+
+            if (isIdle) {
+                dogGroup.rotation.y += 0.005;
+            }
+
+            if (controls.enabled) {
+                controls.update();
+            }
+
+            if (isGameMode) {
+                for (let i = 0; i < 5; i++) {
+                    if (activeTickFlags[i]) {
+                        const param = tickMoveParams[i];
+                        
+                        const offsetX = Math.sin(elapsedTime * param.speedX + param.phase) * param.rangeX 
+                                      + Math.cos(elapsedTime * (param.speedX * 0.5)) * (param.rangeX * 0.4);
+                        const offsetY = Math.cos(elapsedTime * param.speedY + param.phase) * param.rangeY
+                                      + Math.sin(elapsedTime * (param.speedY * 0.6)) * (param.rangeY * 0.3);
+                        const offsetZ = Math.sin(elapsedTime * param.speedX * 0.7 + param.phase) * (param.rangeX * 0.3);
+
+                        const currentPos = new THREE.Vector3(
+                            baseMarkerPositions[i].x + offsetX,
+                            baseMarkerPositions[i].y + offsetY,
+                            baseMarkerPositions[i].z + offsetZ
+                        );
+
+                        updateMarkerPosition(htmlMarkers[i], currentPos, i, elapsedTime);
+                    }
+                }
+            }
+
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
 </body>
 </html>
